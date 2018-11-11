@@ -4,44 +4,65 @@ import android.Manifest;
 import android.annotation.SuppressLint;
 import android.app.Service;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
+import android.net.Uri;
 import android.os.Environment;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
 import android.os.PowerManager;
 import android.os.SystemClock;
+import android.preference.PreferenceManager;
+import android.text.TextUtils;
 import android.util.Log;
 import android.widget.Toast;
 
+import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileOutputStream;
+import java.io.FileReader;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.PrintWriter;
 
 public class CamService extends Service {
 
+    int version = 11112018;
+
     private Boolean serviceRunning = false;
-    private int run = 0;
+    private Boolean run = true;
     private PowerManager.WakeLock wakeLock;
 
-    @SuppressLint("WakelockTimeout")
+    @SuppressLint({"WakelockTimeout", "InvalidWakeLockTag"})
     private void running() {
+        File conf;
+        final File files = this.getFilesDir();
+        final String storage_dir = Environment.getExternalStorageDirectory().getAbsolutePath();
+        if (write_storage() && read_storage()) conf = new File(storage_dir + "/OSEbuild/OSCam");
+        else conf = files;
         if (!serviceRunning) {
-            File conf;
-            if (write_storage() && read_storage())
-                conf = new File(Environment.getExternalStorageDirectory().getAbsolutePath() + "/OSEbuild/OSCam");
-            else conf = this.getFilesDir();
             final File cam = new File(this.getFilesDir().getParent() + "/oscam");
             final File tmp = new File(conf + "/tmp");
+            final File pidfile = new File(tmp + "/oscam.pid");
             if (!tmp.exists() && tmp.mkdirs())
                 Log.d("Mkdir", String.valueOf(tmp));
+            SharedPreferences sharedPreferences = PreferenceManager.getDefaultSharedPreferences(this);
+            final boolean killall_status = sharedPreferences.getBoolean("killall_status", false);
             serviceRunning = true;
-            try {
-                Runtime.getRuntime().exec("killall -9 oscam");
-            } catch (Exception e) {
-                e.printStackTrace();
+            if (killall_status) {
+                if (pidfile.exists()) exec("killall -9 oscam");
+            } else {
+                if (pidfile.exists()) {
+                    StringBuilder pid = new StringBuilder();
+                    try {
+                        BufferedReader br = new BufferedReader(new FileReader(pidfile));
+                        pid.append(br.readLine());
+                    } catch (Exception ignored) {
+                    } finally {
+                        exec("kill -9 " + pid);
+                    }
+                }
             }
             conf_file(conf + "/oscam.conf", "\n" +
                     "[global]\n" +
@@ -85,7 +106,8 @@ public class CamService extends Service {
                     "user                          = dvbapi\n" +
                     "group                         = 1\n");
             conf_file(tmp + "/stat", "");
-            if (!cam.exists()) {
+            int version_old = sharedPreferences.getInt("version", 0);
+            if (!cam.exists() || version != version_old) {
                 try {
                     InputStream is = getAssets().open("oscam");
                     FileOutputStream fos = new FileOutputStream(cam);
@@ -97,8 +119,23 @@ public class CamService extends Service {
                 } catch (Exception e) {
                     e.printStackTrace();
                 }
-                if (cam.setExecutable(true, false))
-                    Log.d("Executable", String.valueOf(cam));
+                SharedPreferences.Editor editor = sharedPreferences.edit();
+                editor.putInt("version", version);
+                editor.apply();
+                Process process_ = null;
+                try {
+                    process_ = Runtime.getRuntime().exec("killall");
+                } catch (Exception e_) {
+                    editor.putBoolean("killall_status", false);
+                    editor.apply();
+                } finally {
+                    if (process_ != null) {
+                        process_.destroy();
+                        editor.putBoolean("killall_status", true);
+                        editor.apply();
+                    }
+                }
+                chmod(cam);
                 Log.d("OSCam", "installing!");
             }
             if (cam.exists()) {
@@ -108,8 +145,8 @@ public class CamService extends Service {
                         Process process = Runtime.getRuntime().exec(cam + " -c " + conf + " -t " + tmp);
                         process.waitFor();
                         serviceRunning = false;
-                        if (run < 5) {
-                            run++;
+                        if (run) {
+                            run = false;
                             Thread.sleep(4000);
                             running();
                         }
@@ -127,23 +164,49 @@ public class CamService extends Service {
                         wakeLock.acquire();
                     }
                 }
-                run = 0;
+                run = true;
                 toast("OSCam started!");
             } else {
                 if (wake_lock() && wakeLock != null) wakeLock.release();
                 toast("OSCam ERROR!");
             }
         } else {
-            run = 0;
-            toast("OSCam in progress");
+            run = true;
+            try {
+                StringBuilder text = new StringBuilder();
+                try (BufferedReader reader = new BufferedReader(new FileReader(conf + "/oscam.conf"))) {
+                    String line;
+                    while (null != (line = reader.readLine())) {
+                        String[] strings = TextUtils.split(line, "httpport                      = ");
+                        if (strings.length < 2)
+                            continue;
+                        text.append(strings[1]);
+                    }
+                } finally {
+                    if (!text.toString().equals(""))
+                        getApplicationContext().startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse("http://127.0.0.1:" + text.toString())).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+                    else toast("OSCam in progress");
+                }
+            } catch (IOException e) {
+                e.printStackTrace();
+                toast("OSCam in progress");
+            }
         }
     }
 
-    @Override
-    public int onStartCommand(Intent intent, int flags, int startId) {
-        running();
-        super.onStartCommand(intent, flags, startId);
-        return START_STICKY;
+    private void toast(final String text) {
+        Handler handler = new Handler(Looper.getMainLooper());
+        handler.post(() -> Toast.makeText(this, text, Toast.LENGTH_LONG).show());
+    }
+
+    private void exec(final String string) {
+        if (string != null) {
+            try {
+                Runtime.getRuntime().exec(string);
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }
     }
 
     private void conf_file(String file, String string) {
@@ -177,9 +240,24 @@ public class CamService extends Service {
         return result == PackageManager.PERMISSION_GRANTED;
     }
 
-    private void toast(final String text) {
-        Handler handler = new Handler(Looper.getMainLooper());
-        handler.post(() -> Toast.makeText(this, text, Toast.LENGTH_LONG).show());
+    @SuppressLint({"SetWorldReadable", "SetWorldWritable"})
+    private static void chmod(File file) {
+        Boolean isExecutable = file.setExecutable(true, false);
+        Boolean isReadable = file.setReadable(true, false);
+        Boolean isWritable = file.setWritable(true, false);
+        if (isExecutable)
+            Log.d("Executable", String.valueOf(file));
+        if (isReadable)
+            Log.d("Readable", String.valueOf(file));
+        if (isWritable)
+            Log.d("Writable", String.valueOf(file));
+    }
+
+    @Override
+    public int onStartCommand(Intent intent, int flags, int startId) {
+        running();
+        super.onStartCommand(intent, flags, startId);
+        return START_STICKY;
     }
 
     @Override

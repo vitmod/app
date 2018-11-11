@@ -17,7 +17,7 @@ android {
     }
     externalNativeBuild {
         ndkBuild {
-            path 'src/main/jni/Android.mk'
+            path 'src/main/jni/oscam.mk'
         }
     }
     buildTypes {
@@ -40,7 +40,7 @@ gradle.taskGraph.afterTask { task ->
     else string = 'debug'
     def src = 'build/intermediates/ndkBuild/' + string + '/obj/local/' + abi
     copy {
-        from(src) { exclude "/objs*" exclude "/libusb1.0*" }
+        from(src) { exclude "/objs*" exclude "/lib*" }
         into 'src/main/assets/'
     }
 }
