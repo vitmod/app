@@ -9,7 +9,7 @@ LOCAL_C_INCLUDES += \
 		$(LOCAL_PATH)/$(DIR)/libusb/os
 
 LOCAL_EXPORT_C_INCLUDES := \
-		$(LOCAL_PATH)/libusb-1.0.22/libusb
+		$(LOCAL_PATH)/$(DIR)/libusb
 
 LOCAL_SRC_FILES := \
 		$(DIR)/libusb/core.c \
@@ -26,8 +26,6 @@ LOCAL_SRC_FILES := \
 LOCAL_SRC_FILES += $(info $(shell (svn co https://github.com/libusb/libusb/tags/v1.0.22 $(LOCAL_PATH)/$(DIR))))
 LOCAL_SRC_FILES += $(info $(shell (ln -s libusb $(LOCAL_PATH)/$(DIR)/libusb-1.0)))
 
-LOCAL_LDLIBS := -llog
-LOCAL_LDFLAGS := -llog -Wl,-s
 LOCAL_MODULE := libusb1.0_static
 
 include $(BUILD_STATIC_LIBRARY)

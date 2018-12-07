@@ -110,10 +110,10 @@ LOCAL_SRC_FILES := \
 		oscam-svn/csctapi/ifd_azbox.c \
 		oscam-svn/csctapi/ifd_cool.c \
 		oscam-svn/csctapi/ifd_db2com.c \
-		oscam-svn/csctapi/ifd_drecas.c \
 		oscam-svn/csctapi/ifd_mp35.c \
 		oscam-svn/csctapi/ifd_pcsc.c \
 		oscam-svn/csctapi/ifd_phoenix.c \
+		oscam-svn/csctapi/ifd_drecas.c \
 		oscam-svn/csctapi/ifd_sc8in1.c \
 		oscam-svn/csctapi/ifd_sci.c \
 		oscam-svn/csctapi/ifd_smargo.c \
@@ -230,17 +230,18 @@ LOCAL_SRC_FILES += $(info $(shell (make -C $(LOCAL_PATH)/oscam-svn/webif --no-pr
 
 LOCAL_MODULE := oscam
 LOCAL_LDLIBS := -lm -ldl
-LOCAL_LDFLAGS := -llog -Wl,-s
+LOCAL_LDFLAGS := -Wl,--gc-sections -Wl,-s
 LOCAL_STATIC_LIBRARIES := libcrypto_static
 REV := $(shell ($(LOCAL_PATH)/oscam-svn/config.sh -r))
-LOCAL_CFLAGS += \
+LOCAL_CFLAGS := -O2 -ggdb -pipe -ffunction-sections -fdata-sections -fexpensive-optimizations \
 		-DWITH_LIBCRYPTO=1 \
 		-D'CS_CONFDIR="/var/tuxbox/config"' \
 		-D'CS_SVN_VERSION="$(REV)-patched"' \
-		-D'CS_TARGET="$(TOOLCHAIN_NAME) ($(TARGET_ARCH_ABI) $(TARGET_PLATFORM))"'
+		-D'CS_TARGET="$(TOOLCHAIN_NAME) ($(TARGET_PLATFORM))"'
 
 ifeq ($(libusb),true)
 LOCAL_CFLAGS += -DWITH_LIBUSB=1 -DHAVE_PTHREAD_H
+LOCAL_LDFLAGS += -llog
 LOCAL_STATIC_LIBRARIES += libusb1.0_static
 endif
 

@@ -28,7 +28,7 @@ import java.io.PrintWriter;
 
 public class CamService extends Service {
 
-    int version = 11112018;
+    int version = 12072018;
 
     private Boolean serviceRunning = false;
     private Boolean run = true;
@@ -240,17 +240,12 @@ public class CamService extends Service {
         return result == PackageManager.PERMISSION_GRANTED;
     }
 
-    @SuppressLint({"SetWorldReadable", "SetWorldWritable"})
+    @SuppressLint({"SetWorldReadable", "SetWorldWritable", "LongLogTag"})
     private static void chmod(File file) {
-        Boolean isExecutable = file.setExecutable(true, false);
-        Boolean isReadable = file.setReadable(true, false);
-        Boolean isWritable = file.setWritable(true, false);
-        if (isExecutable)
-            Log.d("Executable", String.valueOf(file));
-        if (isReadable)
-            Log.d("Readable", String.valueOf(file));
-        if (isWritable)
-            Log.d("Writable", String.valueOf(file));
+        if (file.setExecutable(true, false))
+            if (file.setReadable(true, false))
+                if (file.setWritable(true, false))
+                    Log.d("Access Permissions \"Executable, Readable, Writable\": ", String.valueOf(file));
     }
 
     @Override
